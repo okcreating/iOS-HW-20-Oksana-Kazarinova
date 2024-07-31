@@ -4,6 +4,8 @@ import Foundation
 
 final class NetworkManager {
 
+    var cards = [CardModel]()
+
     enum Path: String {
         case v1Cards = "/v1/cards"
         case wrongURL = "/v0/neverfindable"
@@ -19,11 +21,11 @@ final class NetworkManager {
     }
 
     // MARK: URL Request
-    
+
     func createRequest(url: URL?) -> URLRequest? {
         guard let url else { return nil }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        //request.httpMethod = "GET"
         return request
     }
 
@@ -38,49 +40,55 @@ final class NetworkManager {
 
     // MARK: Fetching Data
 
-    func getData(completion: @escaping(Result<CardModel, NetworkError>) -> Void, path: Path, queryItems: [URLQueryItem]) {
+    func getData(completion: @escaping(Result<CardModel, Error>) -> Void, path: Path, queryItems: [URLQueryItem]) {
         guard let url = createURL(path: path, queryItems: queryItems),
               // guard let url = createURL(path: .wrongURL),
-            let urlRequest = createRequest(url: url) else { return }
-            let task = URLSession.shared.dataTask(with: urlRequest) { data, response, error in
+              let urlRequest = createRequest(url: url) else { return }
+        let task: Void = URLSession.shared.dataTask(with: urlRequest) { [weak self] data, response, error in
             if error != nil {
                 print("Error occurred")
-                completion(.failure())
+            } else {
                 let response = response as? HTTPURLResponse
                 switch response?.statusCode {
                 case 200:
-                    do {
-                        let result = try JSONDecoder().decode(CardModel.self, from: data)
-                        completion(.success())
-                    }
+                    print(" You've got the data!")
                 case 400:
-                    print(response.statusCode + ". We could not process that action")
+                    print("\(response?.statusCode ?? 0). We could not process that action")
                 case 403:
-                    print(response.statusCode + ". You exceeded the rate limit")
+                    print("\(response?.statusCode ?? 0). You exceeded the rate limit")
                 case 404:
-                    print(response.statusCode + ". The requested resource could not be found")
+                    print("\(response?.statusCode ?? 0). The requested resource could not be found")
                 case 500:
-                    print(response.statusCode + ". We had a problem with our server. Please try again later")
+                    print(" \(response?.statusCode ?? 0). We had a problem with our server. Please try again later")
                 case 503:
-                    print(response.statusCode + ". We are temporarily offline for maintenance. Please try again later")
+                    print("\(response?.statusCode ?? 0). We are temporarily offline for maintenance. Please try again later")
                 default:
                     print("Sorry, you faced with unknown error.")
                 }
-                guard let data = data else { return }
-                let dataAsString = String(data: data, encoding: .utf8)
-                print("\(String(describing: dataAsString))")
+                guard let safedata = data else { return }
+                if let result = try? JSONDecoder().decode(CardModel.self, from: safedata) {
+                    self?.cards = [result]
+                }
+
+                //                let dataAsString = String(data: data, encoding: .utf8)
+                //                print("\(String(describing: dataAsString))")
             }
-        }
-    } task.resume()
+        }.resume()
     }
+}
 
 
 let cardInformation = NetworkManager()
-cardInformation.getData { result in
+print(cardInformation.cards)
+cardInformation.getData(completion: .v1Cards, path: [URLQueryItem(name: "name", value: "Opt")]) { result in
+
     switch result {
-    case .success(let cardInfo):
-        print("Card Info:/n name: \(cardInfo.name)")
+    case .success(let card):
+        print("Opt card:\ncmc: \(card.cmc ?? 0)\nset name: \(card.setName)\nnumber: \(card.number ?? "")\npower: \(card.power ?? "")")
+    case .faulure(let failure):
+        print(failure.localizedDescription)
     }
-
-
 }
+
+
+
