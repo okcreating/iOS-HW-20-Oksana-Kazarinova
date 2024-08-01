@@ -1,6 +1,6 @@
 import Foundation
 
- enum NetworkError: Error {
+ public enum NetworkError: Error {
     case badRequest
     case forbidden
     case notFound

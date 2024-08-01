@@ -1,10 +1,23 @@
 import Foundation
 
-// MARK: URL Creation
+// MARK: Model
 
-final class NetworkManager {
+public struct Cards: Decodable {
+    let cards: [Card]
+}
 
-    var cards = [CardModel]()
+public struct Card: Decodable {
+    var name: String
+    var cmc: Int?
+    var setName: String
+    var number: String?
+    var power: String?
+    var artist: String?
+}
+
+final class NetworkManager: ObservableObject {
+
+    // MARK: URL Creation
 
     enum Path: String {
         case v1Cards = "/v1/cards"
@@ -20,75 +33,83 @@ final class NetworkManager {
         return components.url
     }
 
+    // MARK: Errors
+
+    enum NetworkError: Error {
+        case noAccess
+        case badRequest
+        case forbidden
+        case notFound
+        case internalServerError
+        case serviceUnavailable
+    }
+
     // MARK: URL Request
 
     func createRequest(url: URL?) -> URLRequest? {
         guard let url else { return nil }
-        var request = URLRequest(url: url)
-        //request.httpMethod = "GET"
+        let request = URLRequest(url: url)
         return request
     }
 
-    //// MARK: Session Configuration
-    //
-    //func sessionConfiguration() -> URLSession {
-    //    let configuration = URLSessionConfiguration.default
-    //    configuration.allowsCellularAccess = false
-    //    configuration.waitsForConnectivity = true
-    //    return URLSession(configuration: configuration)
-    //}
-
     // MARK: Fetching Data
 
-    func getData(completion: @escaping(Result<CardModel, Error>) -> Void, path: Path, queryItems: [URLQueryItem]) {
+    func getData(path: Path, queryItems: [URLQueryItem], completion: @escaping(Result<Cards, NetworkError>) -> Void) {
         guard let url = createURL(path: path, queryItems: queryItems),
-              // guard let url = createURL(path: .wrongURL),
               let urlRequest = createRequest(url: url) else { return }
-        let task: Void = URLSession.shared.dataTask(with: urlRequest) { [weak self] data, response, error in
+
+        URLSession.shared.dataTask(with: urlRequest) { data, response, error in
             if error != nil {
                 print("Error occurred")
-            } else {
-                let response = response as? HTTPURLResponse
-                switch response?.statusCode {
+                completion(.failure(.noAccess))
+                } else {
+                guard let httpresponse = response as? HTTPURLResponse,
+                      let data else { return }
+
+                switch httpresponse.statusCode {
                 case 200:
-                    print(" You've got the data!")
+                    print("You've got the data!")
+                    do {
+                        let result = try JSONDecoder().decode(Cards.self, from: data)
+                        completion(.success(result))
+                    } catch {
+                            completion(.failure(.noAccess))
+                    }
                 case 400:
-                    print("\(response?.statusCode ?? 0). We could not process that action")
+                    print("\(httpresponse.statusCode). We could not process that action")
+                    completion(.failure(.badRequest))
                 case 403:
-                    print("\(response?.statusCode ?? 0). You exceeded the rate limit")
+                    print("\(httpresponse.statusCode). You exceeded the rate limit")
+                    completion(.failure(.forbidden))
                 case 404:
-                    print("\(response?.statusCode ?? 0). The requested resource could not be found")
+                    print("\(httpresponse.statusCode). The requested resource could not be found")
+                    completion(.failure(.notFound))
                 case 500:
-                    print(" \(response?.statusCode ?? 0). We had a problem with our server. Please try again later")
+                    print(" \(httpresponse.statusCode). We had a problem with our server. Please try again later")
+                    completion(.failure(.internalServerError))
                 case 503:
-                    print("\(response?.statusCode ?? 0). We are temporarily offline for maintenance. Please try again later")
+                    print("\(httpresponse.statusCode). We are temporarily offline for maintenance. Please try again later")
+                    completion(.failure(.serviceUnavailable))
                 default:
                     print("Sorry, you faced with unknown error.")
-                }
-                guard let safedata = data else { return }
-                if let result = try? JSONDecoder().decode(CardModel.self, from: safedata) {
-                    self?.cards = [result]
-                }
-
-                //                let dataAsString = String(data: data, encoding: .utf8)
-                //                print("\(String(describing: dataAsString))")
-            }
-        }.resume()
+                    completion(.failure(.noAccess))
+                    }
+               }
+            }.resume()
+        }
     }
-}
 
+var cardsInformation = NetworkManager()
 
-let cardInformation = NetworkManager()
-print(cardInformation.cards)
-cardInformation.getData(completion: .v1Cards, path: [URLQueryItem(name: "name", value: "Opt")]) { result in
-
+cardsInformation.getData(path:.v1Cards, queryItems: [URLQueryItem(name: "name", value: "Opt|Black Lotus")]) { result in
     switch result {
-    case .success(let card):
-        print("Opt card:\ncmc: \(card.cmc ?? 0)\nset name: \(card.setName)\nnumber: \(card.number ?? "")\npower: \(card.power ?? "")")
-    case .faulure(let failure):
+    case .success(let cards):
+        print(cards.cards.forEach({ card in
+            print("\(card.name.uppercased()) card:\ncmc: \(card.cmc ?? 0)\nset name: \(card.setName)\nnumber: \(card.number ?? "")\npower: \(card.power ?? "Doesn't matter")\nartist: \(card.artist ?? "unknowm")\n")
+        }))
+    case .failure(let failure):
         print(failure.localizedDescription)
     }
 }
-
 
 
