@@ -101,10 +101,11 @@ final class NetworkManager: ObservableObject {
 
 var cardsInformation = NetworkManager()
 
+//cardsInformation.getData(path:.wrongURL, queryItems:
 cardsInformation.getData(path:.v1Cards, queryItems: [URLQueryItem(name: "name", value: "Opt|Black Lotus")]) { result in
     switch result {
     case .success(let cards):
-        print(cards.cards.forEach({ card in
+        print(cards.cards.forEach( { card in
             print("\(card.name.uppercased()) card:\ncmc: \(card.cmc ?? 0)\nset name: \(card.setName)\nnumber: \(card.number ?? "")\npower: \(card.power ?? "Doesn't matter")\nartist: \(card.artist ?? "unknowm")\n")
         }))
     case .failure(let failure):
